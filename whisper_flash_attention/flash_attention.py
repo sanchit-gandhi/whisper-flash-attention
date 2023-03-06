@@ -101,10 +101,11 @@ class WhisperFlashAttention(nn.Module):
             query_states, key_states, value_states,
             attn_bias=attn_bias,
             scale=self.scaling,
+            p=self.dropout if self.training else 0.0,
         )  # (bsz, tgt_len, heads, head_dim)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
+        # partitioned across GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)  # (bsz, tgt_len, embed_dim)
 
         attn_output = self.out_proj(attn_output)  # (bsz, tgt_len, embed_dim)

@@ -85,6 +85,8 @@ for checkpoint in whisper_checkpoints:
             predicted_ids = model.generate(batch["input_features"].to("cuda").half(), max_new_tokens=GENERATED_TOKENS, min_new_tokens=GENERATED_TOKENS)
         runtime = time.time() - start
 
+        decoder_layer_results[checkpoint].append(int(decoder_layers))
+        runtime_results[checkpoint].append(runtime)
         param_results[checkpoint].append(model.num_parameters() / 10 ** 6)
         vram_results[checkpoint].append(get_gpu_memory()[0])
 

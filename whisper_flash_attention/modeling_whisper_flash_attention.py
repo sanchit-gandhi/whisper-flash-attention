@@ -36,7 +36,7 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from transformers.models.whisper.configuration_whisper import WhisperConfig
 
-from flash_attention import WhisperFlashAttention
+from .flash_attention import WhisperFlashAttention
 
 logger = logging.get_logger(__name__)
 
