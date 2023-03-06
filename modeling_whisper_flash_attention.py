@@ -36,6 +36,7 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from transformers.models.whisper.configuration_whisper import WhisperConfig
 
+from flash_attention import WhisperFlashAttention
 
 logger = logging.get_logger(__name__)
 
@@ -105,12 +106,12 @@ class WhisperPositionalEmbedding(nn.Embedding):
         return self.weight[past_key_values_length : past_key_values_length + input_ids.shape[-1]]
 
 
-# Copied from transformers.models.whisper.modeling_whisper.WhisperEncoderLayer
+# Copied from transformers.models.whisper.modeling_whisper.WhisperEncoderLayer with WhisperAttention->WhisperFlashAttention
 class WhisperEncoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = WhisperAttention(
+        self.self_attn = WhisperFlashAttention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -174,13 +175,13 @@ class WhisperEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.whisper.modeling_whisper.WhisperDecoderLayer
+# Copied from transformers.models.whisper.modeling_whisper.WhisperDecoderLayer with WhisperAttention->WhisperFlashAttention
 class WhisperDecoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = WhisperAttention(
+        self.self_attn = WhisperFlashAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -191,7 +192,7 @@ class WhisperDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = WhisperAttention(
+        self.encoder_attn = WhisperFlashAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -939,8 +940,8 @@ class WhisperModel(WhisperPreTrainedModel):
     "The Whisper Model with a language modeling head. Can be used for automatic speech recognition.",
     WHISPER_START_DOCSTRING,
 )
-# Copied from transformers.models.whisper.modeling_whisper.WhisperForConditionalGeneration
-class WhisperMQAForConditionalGeneration(WhisperPreTrainedModel):
+# Copied from transformers.models.whisper.modeling_whisper.WhisperForConditionalGeneration with WhisperForConditionalGeneration->WhisperFlashAttentionForConditionalGeneration
+class WhisperFlashAttentionForConditionalGeneration(WhisperPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
         r"encoder.version",
