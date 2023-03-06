@@ -1,0 +1,2 @@
+from whisper_flash_attention.flash_attention import WhisperFlashAttention
+from whisper_flash_attention.modeling_whisper_flash_attention import WhisperFlashAttentionForConditionalGeneration

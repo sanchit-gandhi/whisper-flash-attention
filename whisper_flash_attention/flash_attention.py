@@ -3,10 +3,10 @@ from typing import Optional, Tuple
 import torch
 from torch import nn
 
-from flash_attn.flash_attn_interface import flash_attn_unpadded_func
+import xformers.ops as xops
 
 class WhisperFlashAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """Memory-efficient multi-head attention using the xFormers backend."""
 
     def __init__(
         self,
@@ -35,9 +35,8 @@ class WhisperFlashAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    # Copied from transformers.models.bart.modeling_bart.BartAttention._shape with BART->whisper
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).contiguous()
 
     def forward(
         self,
@@ -57,7 +56,7 @@ class WhisperFlashAttention(nn.Module):
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj - don't scale here since Flash Attention performs this under the hood
-        query_states = self.q_proj(hidden_states)  # (bsz, tgt_len, head_dim)
+        query_states = self._shape(self.q_proj(hidden_states), -1, bsz)
         # get key, value proj
         # `past_key_value[0].shape[2] == key_value_states.shape[1]`
         # is checking that the `sequence_length` of the `past_key_value` is the same as
@@ -78,8 +77,8 @@ class WhisperFlashAttention(nn.Module):
             # reuse k, v, self_attention
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)  # (bsz, src_len, heads, head_dim)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)  # (bsz, src_len, heads, head_dim)
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+            key_states = torch.cat([past_key_value[0], key_states], dim=1)
+            value_states = torch.cat([past_key_value[1], value_states], dim=1)
         else:
             # self_attention
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)  # (bsz, src_len, heads, head_dim)
@@ -95,28 +94,18 @@ class WhisperFlashAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)  # (bsz * heads, -1, head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)  # (bsz * heads, tgt_len, head_dim)
-        key_states = key_states.view(*proj_shape)  # (bsz * heads, src_len, head_dim)
-        value_states = value_states.view(*proj_shape)  # (bsz * heads, src_len, head_dim)
+        # lower triangular mask enforces the attention computation to be causal
+        attn_bias = xops.LowerTriangularMask() if self.is_decoder else None
 
-        src_len = key_states.size(1)
+        attn_output = xops.memory_efficient_attention(
+            query_states, key_states, value_states,
+            attn_bias=attn_bias,
+            scale=self.scaling,
+        )  # (bsz, tgt_len, heads, head_dim)
 
-        cu_seqlens_q = torch.arange(0, (bsz + 1) * tgt_len, step=tgt_len, dtype=torch.int32, device=query_states.device)
-        cu_seqlens_k = torch.arange(0, (bsz + 1) * src_len, step=src_len, dtype=torch.int32, device=key_states.device)
-
-        attn_output = flash_attn_unpadded_func(
-            q=query_states,
-            k=key_states,
-            v=value_states,
-            cu_seqlens_q=cu_seqlens_q,
-            cu_seqlens_k=cu_seqlens_k,
-            max_seqlen_q=tgt_len,
-            max_seqlen_k=src_len,
-            dropout_p=self.dropout if self.training else 0.0,
-            softmax_scale=self.scaling,
-            causal=self.is_decoder,
-        )  # (bsz, tgt_len, head_dim)
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned aross GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)  # (bsz, tgt_len, embed_dim)
 
         attn_output = self.out_proj(attn_output)  # (bsz, tgt_len, embed_dim)
 
