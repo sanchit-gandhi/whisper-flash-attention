@@ -15,6 +15,7 @@ class WhisperFlashAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
+        causal: bool = False,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -29,6 +30,7 @@ class WhisperFlashAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
+        self.causal = causal
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -95,7 +97,7 @@ class WhisperFlashAttention(nn.Module):
             past_key_value = (key_states, value_states)
 
         # lower triangular mask enforces the attention computation to be causal
-        attn_bias = xops.LowerTriangularMask() if self.is_decoder else None
+        attn_bias = xops.LowerTriangularMask() if self.causal else None
 
         attn_output = xops.memory_efficient_attention(
             query_states, key_states, value_states,

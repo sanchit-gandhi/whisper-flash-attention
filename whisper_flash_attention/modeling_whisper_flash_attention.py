@@ -115,6 +115,7 @@ class WhisperEncoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
+            causal=False,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -186,6 +187,7 @@ class WhisperDecoderLayer(nn.Module):
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            causal=True,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -197,6 +199,7 @@ class WhisperDecoderLayer(nn.Module):
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            causal=False,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
