@@ -15,20 +15,24 @@ pip install -U xformers transformers
 ```
 
 ## Usage
-The memory efficient attention model can be loaded in much the same way as the original Hugging Face Transformers model:
-```python
-from transformers import WhisperConfig
-from whisper_flash_attention import WhisperFlashAttentionForConditionalGeneration
-
-config = WhisperConfig()
-model = WhisperFlashAttentionForConditionalGeneration(config)
-```
-Currently, this repository only supports randomly initialised weights. Adding support to convert pre-trained weights to 
-the flash attention format is a TODO:
+The memory efficient flash attention model can be loaded and run in much the same way as the original Hugging Face 
+Transformers implementation:
 ```python
 from whisper_flash_attention import WhisperFlashAttentionForConditionalGeneration
+from transformers import WhisperProcessor
+from datasets import load_dataset
 
+processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
 model = WhisperFlashAttentionForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+model.to("cuda").half()
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+sample = ds[0]["audio"]
+
+input_features = processor(sample["array"], sampling_rate=sample["sampling_rate"], return_tensors="pt").input_features
+
+pred_ids = model.generate(input_features.to("cuda").half())
+transcription = processor.batch_decode(pred_ids, skip_special_tokens=True)[0]
 ```
 
 ## Results
