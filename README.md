@@ -39,7 +39,7 @@ The benchmark can be run from the Python script in [benchmark_flash_attention.py
 * Generated tokens = 25: this is the typical output sequence length for speech
 * Num batches = 100: benchmark over multiple batches for a good estimate of runtime
 
-The following table shows the VRAM and inference time results for Vanilla (V) attention vs Flash (F) attention for 
+The following table shows the VRAM and inference time results for Original (Orig) vs Flash (F) attention for 
 various checkpoints and decoder layers:
 
 | Checkpoint | Dec layers | VRAM Orig / GB | VRAM FA / GB | Time Orig / s | Time FA / s |
